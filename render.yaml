@@ -1,0 +1,15 @@
+# Render Blueprint: dashboard > New > Blueprint > pick this repository.
+services:
+  - type: web
+    name: payrail-test-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Payrail shows a token for each listing. Paste it here (just the 48 hex characters, or the whole payrail-verify=... value).
+      - key: PAYRAIL_VERIFICATION
+        sync: false
