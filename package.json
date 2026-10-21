@@ -1,0 +1,12 @@
+{
+  "name": "payrail-test-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A small API for testing Payrail marketplace listings",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
