@@ -56,7 +56,16 @@ function createServer(env = process.env) {
       return send(200, { message: "Hello from my Payrail test API!", service: SERVICE, version: 1, asOf: new Date().toISOString() });
     }
     if (path === VERIFY_PATH) {
-      if (!proof) return send(404, { error: "Verification is not configured: set PAYRAIL_VERIFICATION to the token Payrail shows for your listing" });
+      if (!proof) {
+        // never echo the configured value; only say WHY nothing is served
+        const set = String(env.PAYRAIL_VERIFICATION || "").trim() !== "";
+        return send(404, {
+          error: set
+            ? "PAYRAIL_VERIFICATION is set but malformed: it must be the 48 lowercase hex characters Payrail shows, or the whole payrail-verify=<48 hex> value (check for quotes, spaces or a truncated paste)"
+            : "PAYRAIL_VERIFICATION is not set on this service: add it in the Render Environment tab, then let the service redeploy",
+          configured: set,
+        });
+      }
       return send(200, proof, "text/plain; charset=utf-8");
     }
     return send(404, { error: "Endpoint not found" });

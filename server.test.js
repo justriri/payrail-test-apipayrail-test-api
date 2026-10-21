@@ -87,3 +87,32 @@ test("verification is never faked: not configured or malformed means 404", async
   assert.equal(verificationValue(TOKEN), `payrail-verify=${TOKEN}`);
   assert.equal(verificationValue("x"), null);
 });
+
+test("the 404 says WHY (not set vs malformed) and never echoes the configured value", async () => {
+  const unset = await start({});
+  try {
+    const b = await (await fetch(`${unset.base}/.well-known/payrail-verification.txt`)).json();
+    assert.equal(b.configured, false);
+    assert.match(b.error, /is not set/);
+  } finally { await stop(unset); }
+  const secretish = "payrail-verify=SHOULD-NOT-LEAK";
+  const bad = await start({ PAYRAIL_VERIFICATION: secretish });
+  try {
+    const r = await fetch(`${bad.base}/.well-known/payrail-verification.txt`);
+    assert.equal(r.status, 404);
+    const text = await r.text();
+    assert.match(text, /malformed/);
+    assert.ok(!text.includes("SHOULD-NOT-LEAK"));
+  } finally { await stop(bad); }
+});
+
+test("the exact bytes served are payrail-verify=<token>: no JSON, no newline, no extra text", async () => {
+  const s = await start({ PAYRAIL_VERIFICATION: TOKEN });
+  try {
+    const r = await fetch(`${s.base}/.well-known/payrail-verification.txt`);
+    const buf = Buffer.from(await r.arrayBuffer());
+    assert.equal(buf.toString("utf8"), `payrail-verify=${TOKEN}`);
+    assert.equal(buf.length, "payrail-verify=".length + 48);
+    assert.match(r.headers.get("content-type"), /^text\/plain/);
+  } finally { await stop(s); }
+});
