@@ -93,7 +93,7 @@ test("the 404 says WHY (not set vs malformed) and never echoes the configured va
   try {
     const b = await (await fetch(`${unset.base}/.well-known/payrail-verification.txt`)).json();
     assert.equal(b.configured, false);
-    assert.match(b.error, /is not set/);
+    assert.match(b.error, /No proof is configured/);
   } finally { await stop(unset); }
   const secretish = "payrail-verify=SHOULD-NOT-LEAK";
   const bad = await start({ PAYRAIL_VERIFICATION: secretish });
@@ -115,4 +115,31 @@ test("the exact bytes served are payrail-verify=<token>: no JSON, no newline, no
     assert.equal(buf.length, "payrail-verify=".length + 48);
     assert.match(r.headers.get("content-type"), /^text\/plain/);
   } finally { await stop(s); }
+});
+
+test("GitHub flow: a committed .well-known/payrail-verification.txt is served when the env var is not set (and the env var wins when both exist)", async () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const nodePath = require("node:path");
+  const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "proof-"));
+  const file = nodePath.join(dir, "payrail-verification.txt");
+  const OTHER = "fedcba9876543210".repeat(3);
+  try {
+    fs.writeFileSync(file, `payrail-verify=${TOKEN}\n`);
+    const s = await start({ PAYRAIL_PROOF_FILE: file });
+    try {
+      const r = await fetch(`${s.base}/.well-known/payrail-verification.txt`);
+      assert.equal(r.status, 200);
+      assert.equal(await r.text(), `payrail-verify=${TOKEN}`);
+    } finally { await stop(s); }
+    const both = await start({ PAYRAIL_PROOF_FILE: file, PAYRAIL_VERIFICATION: OTHER });
+    try {
+      assert.equal(await (await fetch(`${both.base}/.well-known/payrail-verification.txt`)).text(), `payrail-verify=${OTHER}`);
+    } finally { await stop(both); }
+    fs.writeFileSync(file, "garbage");
+    const bad = await start({ PAYRAIL_PROOF_FILE: file });
+    try {
+      assert.equal((await fetch(`${bad.base}/.well-known/payrail-verification.txt`)).status, 404);
+    } finally { await stop(bad); }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

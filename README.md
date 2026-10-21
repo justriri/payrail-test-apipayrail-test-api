@@ -30,3 +30,6 @@ Payrail only lists an API after the seller proves control of its host. For a hos
 4. In Payrail press **Check file**, sign the wallet challenge, then continue (credential, response contract, publish).
 
 The server never invents a proof: with no (or a malformed) `PAYRAIL_VERIFICATION` the file answers 404. One token is served at a time, so verify one listing per host.
+
+### Easier: verify with GitHub (no token in Render)
+In Payrail's listing page choose **Verify with GitHub**, connect GitHub and enter this repository. Payrail shows a prefilled GitHub link that creates `.well-known/payrail-verification.txt` containing `payrail-verify=<token>`: press Commit, let Render redeploy, and press **Check now**. The API serves the committed file by itself (`PAYRAIL_VERIFICATION` still wins if set). Payrail checks that the file is in the repository (you need write access), that your live API serves the same file, and that the endpoint answers with JSON.

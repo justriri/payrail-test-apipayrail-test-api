@@ -8,6 +8,8 @@
 // Payrail calls https on port 443 only, never follows redirects, and rejects listed URLs that carry a query
 // string, so every route answers directly (no redirects) and the listed endpoint is the bare path.
 const http = require("node:http");
+const fs = require("node:fs");
+const nodePath = require("node:path");
 
 const SERVICE = "payrail-test-api";
 const VERIFY_PATH = "/.well-known/payrail-verification.txt";
@@ -20,9 +22,22 @@ function verificationValue(raw) {
   return /^payrail-verify=[0-9a-f]{48}$/.test(full) ? full : null;
 }
 
+/**
+ * The proof comes from the PAYRAIL_VERIFICATION environment variable if set, otherwise from the committed file
+ * .well-known/payrail-verification.txt in this repository (the GitHub verification flow: commit one file, let the host redeploy).
+ */
+function readCommittedProof(file) {
+  try {
+    return verificationValue(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function createServer(env = process.env) {
   const startedAt = Date.now();
-  const proof = verificationValue(env.PAYRAIL_VERIFICATION);
+  const proofFile = env.PAYRAIL_PROOF_FILE || nodePath.join(__dirname, ".well-known", "payrail-verification.txt");
+  const currentProof = () => verificationValue(env.PAYRAIL_VERIFICATION) || readCommittedProof(proofFile);
 
   return http.createServer((req, res) => {
     const send = (status, body, type = "application/json; charset=utf-8") => {
@@ -56,13 +71,14 @@ function createServer(env = process.env) {
       return send(200, { message: "Hello from my Payrail test API!", service: SERVICE, version: 1, asOf: new Date().toISOString() });
     }
     if (path === VERIFY_PATH) {
+      const proof = currentProof();
       if (!proof) {
         // never echo the configured value; only say WHY nothing is served
         const set = String(env.PAYRAIL_VERIFICATION || "").trim() !== "";
         return send(404, {
           error: set
             ? "PAYRAIL_VERIFICATION is set but malformed: it must be the 48 lowercase hex characters Payrail shows, or the whole payrail-verify=<48 hex> value (check for quotes, spaces or a truncated paste)"
-            : "PAYRAIL_VERIFICATION is not set on this service: add it in the Render Environment tab, then let the service redeploy",
+            : "No proof is configured: commit .well-known/payrail-verification.txt to the repository (GitHub verification) or set PAYRAIL_VERIFICATION, then let the service redeploy",
           configured: set,
         });
       }
