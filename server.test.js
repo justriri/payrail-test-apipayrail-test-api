@@ -3,6 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { createServer, verificationValue } = require("./server.js");
 
+const NO_FILE = require("node:path").join(__dirname, "does-not-exist", "proof.txt"); // the repository commits the real proof, so "not configured" tests point away from it
 const TOKEN = "0123456789abcdef".repeat(3); // 48 hex characters, the shape Payrail issues
 
 function start(env = {}) {
@@ -78,7 +79,7 @@ test("Payrail verification file: served exactly as payrail-verify=<token> when c
 
 test("verification is never faked: not configured or malformed means 404", async () => {
   for (const env of [undefined, "", "not-a-token", "payrail-verify=short", `${TOKEN}zz`]) {
-    const s = await start(env === undefined ? {} : { PAYRAIL_VERIFICATION: env });
+    const s = await start(env === undefined ? { PAYRAIL_PROOF_FILE: NO_FILE } : { PAYRAIL_VERIFICATION: env, PAYRAIL_PROOF_FILE: NO_FILE });
     try {
       const r = await fetch(`${s.base}/.well-known/payrail-verification.txt`);
       assert.equal(r.status, 404, String(env));
@@ -89,14 +90,14 @@ test("verification is never faked: not configured or malformed means 404", async
 });
 
 test("the 404 says WHY (not set vs malformed) and never echoes the configured value", async () => {
-  const unset = await start({});
+  const unset = await start({ PAYRAIL_PROOF_FILE: NO_FILE });
   try {
     const b = await (await fetch(`${unset.base}/.well-known/payrail-verification.txt`)).json();
     assert.equal(b.configured, false);
     assert.match(b.error, /No proof is configured/);
   } finally { await stop(unset); }
   const secretish = "payrail-verify=SHOULD-NOT-LEAK";
-  const bad = await start({ PAYRAIL_VERIFICATION: secretish });
+  const bad = await start({ PAYRAIL_VERIFICATION: secretish, PAYRAIL_PROOF_FILE: NO_FILE });
   try {
     const r = await fetch(`${bad.base}/.well-known/payrail-verification.txt`);
     assert.equal(r.status, 404);
